@@ -12,7 +12,8 @@
 # This program looks through the content of these webages until it finds a 404 page, at which point
 # it calculates how many projects are in the studio.
 
-from requests import get
+from requests import get # note that for this program to work you must install the requests module,
+                         # otherwise it will not work
 import sys
 
 # take and validate input
@@ -48,16 +49,19 @@ def matches(text, match): # returns the number of instances of match in text
     text = text[index + length:]
   return matchNum
   
-invalid = lambda x: "404" in x # if the page contains the string 404, then it was not found.
-getStudio = lambda x: get("https://scratch.mit.edu/site-api/projects/in/{0}/{1}/".format(studioID, x)).text # gets page x from the Scratch website
+invalid = lambda x: "<!DOCTYPE html>" in x # the 404 page is a complete webpage, but the project page is just a snippet
+idFormatter = lambda x: "https://scratch.mit.edu/site-api/projects/in/{0}/{1}/".format(studioID, x)
+getStudio = lambda x: get(idFormatter(x)).text # gets page x from the Scratch website
 
 pageCount = 1
 
 while True: # this will break after it finds an invalid page
   page = getStudio(pageCount)
+  print("Loading page ", pageCount, "...", sep="")
   if invalid(page):
     if pageCount == 1:
-      raise RuntimeError("Unable to get the projects webpage for an unknown reason")
+      raise RuntimeError("""Unable to get the projects webpage for an unknown reason
+              Debug: {0}""".format(idFormatter(pageCount)))
     else:
       break
   save = page # this will end up being the last webpage before the 404 error
