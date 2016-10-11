@@ -28,10 +28,10 @@ else:
   
 studioLink = studioLink.rstrip("/") # eliminate trailing slash in URL
   
-if studioLink[:-7] != "https://scratch.mit.edu/studios/":
+if studioLink[:32] != "https://scratch.mit.edu/studios/":
   raise RuntimeError('Invalid input: input must be URL of the form "https://scratch.mit.edu/studios/#"')
 
-studioID = studioLink[-7:]
+studioID = studioLink[32:] # the actual ID of the studio
 
 try:
   int(studioID)
