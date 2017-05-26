@@ -1,75 +1,67 @@
-# If a Scratch studio has more than 100 projects, it just says 100+ on the studio webpage.
-# This means that it is not convenient to get the number of projects... until now!
-# This is a simple script that will tell you EXACTLY how many projects are in a studio,
-# using the site-api.
-#
-# The way the site-api works is it looks at https://scratch.mit.edu/site-api/projects/in/xxx/y/
-# where xxx is the studio ID and y is the page. Each page has 60 projects, except for the last page.
-# For example, say a studio has 133 projects. Then it would have 3 pages of projects. The first
-# two pages have 60 projects each, and the third page has 13 projects. Any page after that is
-# the Scratch default 404 page.
-#
-# This program looks through the content of these webages until it finds a 404 page, at which point
-# it calculates how many projects are in the studio.
+import sys, re, functools
+import requests
 
-from requests import get # note that for this program to work you must install the requests module,
-                         # otherwise it will not work
-import sys
+PARSE_RE = re.compile(r"^(?:https?://)?scratch\.mit\.edu/studios/(\d+)/?$|^(\d+)$")
+LI_RE = re.compile("<li")
 
-# take and validate input
+EXIT_NOARGS = 1
+EXIT_INVALID_STUDIO_ID = 2
+EXIT_FIRST_PAGE_404 = 3
 
-args = sys.argv[1:]
-if args == []:
-  studioLink = input("Link to the studio: ")
-elif len(args) == 1:
-  studioLink = args[0]
-else:
-  raise RuntimeError("Invalid input: script must be activated with 0 or 1 command line arguments")
-  
-studioLink = studioLink.rstrip("/") # eliminate trailing slash in URL
-  
-if studioLink[:32] != "https://scratch.mit.edu/studios/":
-  raise RuntimeError('Invalid input: input must be URL of the form "https://scratch.mit.edu/studios/#"')
+if len(sys.argv) == 1:
+    print("Usage:")
+    print("  {0} <url or studio ID>:    counts the projects in that studio".format(sys.argv[0]))
+    print("  {0} -v <url or studio ID>: verbose mode (logs all queries)".format(sys.argv[0]))
+    sys.exit(EXIT_NOARGS)
 
-studioID = studioLink[32:] # the actual ID of the studio
+verbose = ("-v" in sys.argv)
+studio_match = PARSE_RE.match(sys.argv[-1])
+if not studio_match:
+    print("Error: Invalid studio ID")
+    print("Must be a URL (scratch.mit.edu/studios/12345678) or a number (12345678)")
+    sys.exit(EXIT_INVALID_STUDIO_ID)
+studio_id = studio_match.group(1)
 
-try:
-  int(studioID)
-except ValueError:
-  raise RuntimeError("Invalid input: studio ID must be a number")
-  
-# Get the number of projects in the studio
+@functools.lru_cache(maxsize=16)
+def query_page(studio_id, page):
+    if verbose:
+        print(end="Querying page {0}... ".format(page))
+    url = "https://scratch.mit.edu/site-api/projects/in/{0}/{1}/".format(studio_id, page)
+    if verbose:
+        print("done")
+    return requests.get(url).text
 
-def matches(text, match): # returns the number of instances of match in text
-  length = len(match)
-  matchNum = 0
-  while match in text:
-    matchNum += 1
-    index = text.index(match)
-    text = text[index + length:]
-  return matchNum
-  
-invalid = lambda x: "<!DOCTYPE html>" in x # the 404 page is a complete webpage, but the project page is just a snippet
-idFormatter = lambda x: "https://scratch.mit.edu/site-api/projects/in/{0}/{1}/".format(studioID, x)
-getStudio = lambda x: get(idFormatter(x)).text # gets page x from the Scratch website
+def is_404(page_html):
+    # The 404 page is a full webpage with a <!DOCTYPE>
+    return ("<!D" in page_html)
 
-pageCount = 1
+def count_li(page_html):
+    # Counts the number of instances of the string "<li" in the argument
+    return len(LI_RE.findall(page_html))
 
-while True: # this will break after it finds an invalid page
-  page = getStudio(pageCount)
-  print("Loading page ", pageCount, "...", sep="")
-  if invalid(page):
-    if pageCount == 1:
-      raise RuntimeError("""Unable to get the projects webpage for an unknown reason
-              Debug: {0}""".format(idFormatter(pageCount)))
+page_maximum = 1
+while True:
+    page_html = query_page(studio_id, page_maximum)
+    if is_404(page_html):
+        if page_maximum == 1:
+            print("Error: couldn't get the first page of studio results.")
+            print("{0} might be an invalid studio ID.".format("scratch.mit.edu/studios/{0}".format(studio_id)))
+            sys.exit(EXIT_FIRST_PAGE_404)
+        page_minimum = page_maximum // 2
+        break
+    page_maximum *= 2
+
+# preform a binary search to find the first 404 studio
+while page_maximum - page_minimum > 1:
+    page_num = (page_minimum + page_maximum) // 2
+    page_html = query_page(studio_id, page_num)
+    if is_404(page_html):
+        page_maximum = page_num
     else:
-      break
-  save = page # this will end up being the last webpage before the 404 error
-  pageCount += 1
-  
-# each webpage has 60 projects, except for the last one, which we don't know, so we get that manually
+        page_minimum = page_num
 
-projectCount = matches(save, "<li class") # looks for how many elements are in the final webpage
-total = (pageCount-2) * 60 + projectCount
-
-print("Total projects: {0}".format(total))
+page_count = page_minimum
+highest_page_html = query_page(studio_id, page_count)
+highest_page_project_count = count_li(highest_page_html)
+total = (page_count - 1) * 60 + highest_page_project_count
+print(total)
