@@ -8,10 +8,8 @@ EXIT_NOARGS = 1
 EXIT_INVALID_STUDIO_ID = 2
 EXIT_FIRST_PAGE_404 = 3
 
-verbose = False
-
 @functools.lru_cache(maxsize=16)
-def query_page(studio_id, page):
+def query_page(studio_id, page, verbose):
     if verbose:
         print(end="Querying page {0}... ".format(page))
     url = "https://scratch.mit.edu/site-api/projects/in/{0}/{1}/".format(studio_id, page)
@@ -30,7 +28,7 @@ def count_li(page_html):
 def count_pages(studio_id, verbose=False):
     page_maximum = 1
     while True:
-        page_html = query_page(studio_id, page_maximum)
+        page_html = query_page(studio_id, page_maximum, verbose)
         if is_404(page_html):
             page_minimum = page_maximum // 2
             break
