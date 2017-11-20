@@ -2,7 +2,6 @@ import re, functools
 import requests
 
 PARSE_RE = re.compile(r"^(?:https?://)?scratch\.mit\.edu/studios/(\d+)/?$|^(\d+)$")
-LI_RE = re.compile("<li")
 
 EXIT_NOARGS = 1
 EXIT_INVALID_STUDIO_ID = 2
@@ -23,7 +22,7 @@ def is_404(page_html):
 
 def count_li(page_html):
     # Counts the number of instances of the string "<li" in the argument
-    return len(LI_RE.findall(page_html))
+    return page_html.count("<li")
 
 def count_pages(studio_id, verbose=False):
     page_maximum = 1
